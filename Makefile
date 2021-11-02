@@ -779,6 +779,8 @@ devbox-grpc:
 		--gogofast_out=plugins=grpc:. \
 		envelope.proto
 
+	cd lib/teleterm && buf generate
+
 .PHONY: goinstall
 goinstall:
 	go install $(BUILDFLAGS) \
