@@ -4183,6 +4183,29 @@ steps:
     - yum -y install createrepo
     - createrepo --cachedir /rpmrepo/teleport/cache --update /rpmrepo/teleport
 
+  - name: Sign RPM repo metadata
+    image: centos:8
+    # This step requires gpg 2.2+. gpg 2.0 (available on centos:7) doesn't understand the format of GPG_RPM_SIGNING_ARCHIVE
+    volumes:
+      - name: rpmrepo
+        path: /rpmrepo
+      # for in-memory tmpfs for key material
+      - name: tmpfs
+        path: /tmpfs
+    environment:
+      GNUPGHOME: /tmpfs/gnupg
+      GPG_RPM_SIGNING_ARCHIVE:
+        from_secret: GPG_RPM_SIGNING_ARCHIVE
+    commands:
+      - |
+        # extract signing key
+        mkdir -m0700 $GNUPGHOME
+        echo "$GPG_RPM_SIGNING_ARCHIVE" | base64 -d | tar -xzf - -C $GNUPGHOME
+        chown -R root:root $GNUPGHOME
+      # Sign rpm repo metadata (yum clients will automatically look for and verify repodata/repomd.xml.asc)
+      - gpg --detach-sign --armor /rpmrepo/teleport/repodata/repomd.xml
+      - rm -rf $GNUPGHOME
+
   - name: Download DEB repo contents
     image: amazon/aws-cli
     environment:
@@ -4278,6 +4301,6 @@ volumes:
       name: drone-s3-debrepo-pvc
 ---
 kind: signature
-hmac: 12641aa370052a34208e681b7d83dd27a99933d0df8ffe62a7264132cb3c5425
+hmac: 6d207515a8e1d85d17f409e166728f5398e6097591e565c971217b7e79ccf8b3
 
 ...
