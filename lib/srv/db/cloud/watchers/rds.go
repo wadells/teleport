@@ -87,18 +87,7 @@ func (f *rdsFetcher) Get(ctx context.Context) (types.Databases, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	var result types.Databases
-	for _, database := range append(rdsDatabases, auroraDatabases...) {
-		match, _, err := services.MatchLabels(f.cfg.Labels, database.GetAllLabels())
-		if err != nil {
-			f.log.Warnf("Failed to match %v against selector: %v.", database, err)
-		} else if match {
-			result = append(result, database)
-		} else {
-			f.log.Debugf("%v doesn't match selector.", database)
-		}
-	}
-	return result, nil
+	return filterDatabasesByLabels(append(rdsDatabases, auroraDatabases...), f.cfg.Labels, f.log), nil
 }
 
 // getRDSDatabases returns a list of database resources representing RDS instances.
@@ -195,6 +184,3 @@ func auroraFilters() []*rds.Filter {
 			services.RDSEngineAuroraPostgres}),
 	}}
 }
-
-// maxPages is the maximum number of pages to iterate over when fetching databases.
-const maxPages = 10
