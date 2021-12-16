@@ -73,6 +73,8 @@ type RemoteClusterTunnelManagerConfig struct {
 	Clock clockwork.Clock
 	// KubeDialAddr is an optional address of a local kubernetes proxy.
 	KubeDialAddr utils.NetAddr
+	// Log is the logger
+	Log logrus.FieldLogger
 }
 
 func (c *RemoteClusterTunnelManagerConfig) CheckAndSetDefaults() error {
@@ -93,6 +95,9 @@ func (c *RemoteClusterTunnelManagerConfig) CheckAndSetDefaults() error {
 	}
 	if c.Clock == nil {
 		c.Clock = clockwork.NewRealClock()
+	}
+	if c.Log == nil {
+		c.Log = logrus.New()
 	}
 
 	return nil
@@ -135,7 +140,7 @@ func (w *RemoteClusterTunnelManager) Run(ctx context.Context) {
 	w.mu.Unlock()
 
 	if err := w.Sync(ctx); err != nil {
-		logrus.Warningf("Failed to sync reverse tunnels: %v.", err)
+		w.cfg.Log.Warningf("Failed to sync reverse tunnels: %v.", err)
 	}
 
 	ticker := time.NewTicker(defaults.ResyncInterval)
@@ -144,11 +149,11 @@ func (w *RemoteClusterTunnelManager) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			logrus.Debugf("Closing.")
+			w.cfg.Log.Debugf("Closing.")
 			return
 		case <-ticker.C:
 			if err := w.Sync(ctx); err != nil {
-				logrus.Warningf("Failed to sync reverse tunnels: %v.", err)
+				w.cfg.Log.Warningf("Failed to sync reverse tunnels: %v.", err)
 				continue
 			}
 		}

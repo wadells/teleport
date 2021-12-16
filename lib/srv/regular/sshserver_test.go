@@ -754,6 +754,7 @@ func (s *SrvSuite) TestProxyReverseTunnel(c *C) {
 		AccessPoint:         s.proxyClient,
 		ReverseTunnelServer: reverseTunnelServer,
 		LocalCluster:        s.server.ClusterName(),
+		Log:                 logger,
 	})
 	c.Assert(err, IsNil)
 
