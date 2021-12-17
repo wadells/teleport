@@ -723,12 +723,16 @@ func (c *windowsDesktopCollection) resources() (r []types.Resource) {
 }
 
 func (c *windowsDesktopCollection) writeText(w io.Writer) error {
-	t := asciitable.MakeTable([]string{"UUID", "Address"})
+	t := asciitable.MakeTable([]string{"Host", "Public Address", "AD Domain", "Labels", "Version"})
 	for _, desktop := range c.desktops {
-		t.AddRow([]string{desktop.GetName(), desktop.GetAddr()})
+		t.AddRow([]string{"", desktop.GetAddr(), desktop.GetDomain(), desktop.LabelsString()[:10], ""})
 	}
 	_, err := t.AsBuffer().WriteTo(w)
 	return trace.Wrap(err)
+}
+
+func (c *windowsDesktopCollection) writeYaml(w io.Writer) error {
+	return utils.WriteYAML(w, c.desktops)
 }
 
 type tokenCollection struct {
