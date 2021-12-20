@@ -1029,7 +1029,7 @@ environment:
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -1136,7 +1136,7 @@ environment:
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -1242,7 +1242,7 @@ environment:
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -1346,7 +1346,7 @@ environment:
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -1450,7 +1450,7 @@ environment:
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -1555,7 +1555,7 @@ name: build-linux-amd64-rpm
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -1687,7 +1687,7 @@ name: build-linux-amd64-fips-rpm
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -1816,7 +1816,7 @@ name: build-linux-amd64-deb
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -1934,7 +1934,7 @@ name: build-linux-amd64-fips-deb
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -2051,7 +2051,7 @@ environment:
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -2153,7 +2153,7 @@ name: build-linux-386-rpm
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -2285,7 +2285,7 @@ name: build-linux-386-deb
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -2403,7 +2403,7 @@ name: build-darwin-amd64
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -2553,7 +2553,7 @@ name: build-darwin-amd64-pkg
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -2690,7 +2690,7 @@ name: build-darwin-amd64-pkg-tsh
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -2829,7 +2829,7 @@ environment:
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -2933,7 +2933,7 @@ environment:
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -3035,7 +3035,7 @@ name: build-linux-arm64-deb
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -3153,7 +3153,7 @@ name: build-linux-arm-deb
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -3271,7 +3271,7 @@ name: build-linux-arm64-rpm
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -3403,7 +3403,7 @@ name: build-linux-arm-rpm
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -3537,7 +3537,7 @@ environment:
 trigger:
   event:
     include:
-    - tag
+    - custom
   ref:
     include:
     - refs/tags/v*
@@ -3639,7 +3639,7 @@ environment:
 
 trigger:
   event:
-    - tag
+    - custom
   ref:
     include:
       - refs/tags/v*
@@ -3750,7 +3750,7 @@ name: build-oss-amis
 
 trigger:
   event:
-    - tag
+    - custom
   ref:
     include:
       - refs/tags/v*
@@ -3851,7 +3851,7 @@ name: build-ent-amis
 
 trigger:
   event:
-    - tag
+    - custom
   ref:
     include:
       - refs/tags/v*
@@ -4413,8 +4413,48 @@ volumes:
   - name: debrepo
     claim:
       name: drone-s3-debrepo-pvc
+
+---
+kind: pipeline
+type: kubernetes
+name: walt-test-pkg-changes
+
+trigger:
+  event:
+    include:
+      - tag
+
+#    - push
+#  branch:
+#    - walt/deb
+
+steps:
+  - name: Check if commit is tagged
+    image: alpine
+    commands:
+      - "[ -n ${DRONE_TAG} ] || (echo 'DRONE_TAG is not set' && exit 1)"
+  - name: Check if tag is prerelease
+    image: golang:1.17-alpine
+    commands:
+      - cd build.assets/version-check-prerelease
+      - go run . -tag ${DRONE_TAG} || (echo '---> Not publishing ${DRONE_REPO} packages to RPM and DEB repos' && exit 78)
+  - name: RPM stuff
+    image: centos:7
+    commands:
+      - echo placeholder
+  - name: Check if tag is latest
+    image: golang:1.17-alpine
+    commands:
+      - cd build.assets/version-check-latest
+      - go run . -tag ${DRONE_TAG} || (echo '---> Not publishing ${DRONE_REPO} packages to DEB repo' && exit 78)
+  - name: DEB stuff
+    image: ubuntu:20.04
+    commands:
+      - echo placeholder
+
+
 ---
 kind: signature
-hmac: 49638e91f2ecd4fccf05988f89a2b7515d24863fbb1a3a323a6bed4682b8d3eb
+hmac: e8f56ab8915f54bfd514b826b501f7368e30f841f5e79075def8df955cc455cc
 
 ...
