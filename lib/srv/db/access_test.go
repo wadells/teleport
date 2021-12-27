@@ -661,20 +661,21 @@ func TestCompatibilityWithOldAgents(t *testing.T) {
 }
 
 type testContext struct {
-	hostID         string
-	clusterName    string
-	tlsServer      *auth.TestTLSServer
-	authServer     *auth.Server
-	authClient     *auth.Client
-	proxyServer    *ProxyServer
-	mux            *multiplexer.Mux
-	mysqlListener  net.Listener
-	webListener    *multiplexer.WebListener
-	proxyConn      chan net.Conn
-	fakeRemoteSite *reversetunnel.FakeRemoteSite
-	server         *Server
-	emitter        *testEmitter
-	hostCA         types.CertAuthority
+	hostID          string
+	clusterName     string
+	tlsServer       *auth.TestTLSServer
+	authServer      *auth.Server
+	authClient      *auth.Client
+	proxyAuthClient *auth.Client
+	proxyServer     *ProxyServer
+	mux             *multiplexer.Mux
+	mysqlListener   net.Listener
+	webListener     *multiplexer.WebListener
+	proxyConn       chan net.Conn
+	fakeRemoteSite  *reversetunnel.FakeRemoteSite
+	server          *Server
+	emitter         *testEmitter
+	hostCA          types.CertAuthority
 	// postgres is a collection of Postgres databases the test uses.
 	postgres map[string]testPostgres
 	// mysql is a collection of MySQL databases the test uses.
@@ -831,8 +832,14 @@ func (c *testContext) makeTLSConfig(t *testing.T) *tls.Config {
 // Close closes all resources associated with the test context.
 func (c *testContext) Close() error {
 	var errors []error
+	if c.proxyAuthClient != nil {
+		errors = append(errors, c.proxyAuthClient.Close())
+	}
 	if c.mux != nil {
 		errors = append(errors, c.mux.Close())
+	}
+	if c.tlsServer != nil {
+		errors = append(errors, c.tlsServer.Close())
 	}
 	if c.mysqlListener != nil {
 		errors = append(errors, c.mysqlListener.Close())
@@ -913,6 +920,7 @@ func setupTestContext(ctx context.Context, t *testing.T, withDatabases ...withDa
 	require.NoError(t, err)
 	proxyAuthorizer, err := auth.NewAuthorizer(testCtx.clusterName, proxyAuthClient, proxyLockWatcher)
 	require.NoError(t, err)
+	testCtx.proxyAuthClient = proxyAuthClient
 
 	// TLS config for database proxy and database service.
 	serverIdentity, err := auth.NewServerIdentity(authServer.AuthServer, testCtx.hostID, types.RoleDatabase)
