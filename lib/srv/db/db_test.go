@@ -23,6 +23,9 @@ import (
 	"os/exec"
 	"strconv"
 	"testing"
+
+	"github.com/gravitational/teleport/api/types"
+	"github.com/stretchr/testify/require"
 )
 
 // TestContextConnections starts a default test context, begins handling connections,
@@ -36,6 +39,27 @@ func TestContextConnections(t *testing.T) {
 
 	testCtx := setupTestContext(context.Background(), t)
 	go testCtx.startHandlingConnections()
+}
+
+func TestMongoConnections(t *testing.T) {
+	var lsof lsofCmd
+	if !lsof.Available() {
+		t.Skip()
+	}
+	t.Cleanup(func() { lsof.TestTCP(t, os.Getpid()) })
+
+	ctx := context.Background()
+	testCtx := setupTestContext(ctx, t, withSelfHostedMongo("mongo"))
+	go testCtx.startHandlingConnections()
+
+	alice := "alice"
+	admin := "admin"
+	wildcard := []string{types.Wildcard}
+	testCtx.createUserAndRole(ctx, t, alice, admin, wildcard, wildcard)
+
+	client, err := testCtx.mongoClient(ctx, alice, "mongo", admin)
+	require.NoError(t, err)
+	client.Disconnect(ctx)
 }
 
 type lsofCmd struct {
