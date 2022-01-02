@@ -47,10 +47,6 @@ func Start(ctx context.Context, cfg Config) error {
 		return trace.Wrap(err)
 	}
 
-	if err := daemonService.Init(); err != nil {
-		return trace.Wrap(err)
-	}
-
 	apiServier, err := apiserver.New(apiserver.Config{
 		HostAddr: cfg.Addr,
 		Daemon:   daemonService,

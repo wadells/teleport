@@ -31,23 +31,40 @@ package uri
 
 import (
 	"fmt"
+
+	"github.com/gravitational/trace"
 )
 
-var pathClusters = New("/clusters/:cluster/*")
-var pathClusterDBs = New("/clusters/:cluster/dbs/:db")
-var pathClusterServers = New("/clusters/:cluster/servers/:server")
-var pathClusterGateways = New("/clusters/:cluster/gateways/:gateway")
+var pathClusters = NewPath("/clusters/:cluster/*")
+var pathLeafClusters = NewPath("/clusters/:cluster/leaves/:leaf/*")
+var pathClusterDBs = NewPath("/clusters/:cluster/dbs/:db")
+var pathClusterServers = NewPath("/clusters/:cluster/servers/:server")
+var pathGateways = NewPath("/gateways/:gateway")
 
-type Parser struct {
-	uri string
+func New(path string) ResourceURI {
+	return ResourceURI{
+		Path: path,
+	}
 }
 
-func Parse(uri string) *Parser {
-	return &Parser{uri}
+func NewCluster(name string) ResourceURI {
+	return ResourceURI{
+		Path: fmt.Sprintf("/clusters/%v", name),
+	}
 }
 
-func (p *Parser) Cluster() string {
-	result, ok := pathClusters.Match(p.uri)
+func NewGateway(id string) ResourceURI {
+	return ResourceURI{
+		Path: fmt.Sprintf("/gateways/%v", id),
+	}
+}
+
+type ResourceURI struct {
+	Path string
+}
+
+func (r ResourceURI) GetCluster() string {
+	result, ok := pathClusters.Match(r.Path + "/")
 	if !ok {
 		return ""
 	}
@@ -55,8 +72,17 @@ func (p *Parser) Cluster() string {
 	return result.Params["cluster"]
 }
 
-func (p *Parser) Server() string {
-	result, ok := pathClusterServers.Match(p.uri)
+func (r ResourceURI) GetLeafCluster() string {
+	result, ok := pathLeafClusters.Match(r.Path + "/")
+	if !ok {
+		return ""
+	}
+
+	return result.Params["leaf"]
+}
+
+func (r ResourceURI) GetServer() string {
+	result, ok := pathClusterServers.Match(r.Path)
 	if !ok {
 		return ""
 	}
@@ -64,8 +90,8 @@ func (p *Parser) Server() string {
 	return result.Params["server"]
 }
 
-func (p *Parser) DB() string {
-	result, ok := pathClusterDBs.Match(p.uri)
+func (r ResourceURI) GetDB() string {
+	result, ok := pathClusterDBs.Match(r.Path)
 	if !ok {
 		return ""
 	}
@@ -73,8 +99,8 @@ func (p *Parser) DB() string {
 	return result.Params["db"]
 }
 
-func (p *Parser) Gateway() string {
-	result, ok := pathClusterGateways.Match(p.uri)
+func (r ResourceURI) GetGateway() string {
+	result, ok := pathGateways.Match(r.Path)
 	if !ok {
 		return ""
 	}
@@ -82,22 +108,13 @@ func (p *Parser) Gateway() string {
 	return result.Params["gateway"]
 }
 
-func (p *Parser) ToString() string {
-	return p.uri
-}
-
-type ResourceURI struct {
-	Path string
-}
-
-func Cluster(name string) ResourceURI {
-	return ResourceURI{
-		Path: fmt.Sprintf("/clusters/%v", name),
-	}
-}
-
 func (r ResourceURI) Server(id string) ResourceURI {
 	r.Path = fmt.Sprintf("%v/servers/%v", r.Path, id)
+	return r
+}
+
+func (r ResourceURI) Leaf(id string) ResourceURI {
+	r.Path = fmt.Sprintf("%v/leaves/%v", r.Path, id)
 	return r
 }
 
@@ -123,4 +140,22 @@ func (r ResourceURI) App(id string) ResourceURI {
 
 func (r ResourceURI) String() string {
 	return r.Path
+}
+
+// NewClusterFromResourceURI creates cluster URI based off resource URI
+func NewClusterFromResourceURI(resourceURI string) (ResourceURI, error) {
+	URI := New(resourceURI)
+	rootClusterName := URI.GetCluster()
+	leafClusterName := URI.GetLeafCluster()
+
+	if rootClusterName == "" {
+		return URI, trace.BadParameter("missing root cluster name")
+	}
+
+	clusterURI := NewCluster(rootClusterName)
+	if leafClusterName != "" {
+		clusterURI = clusterURI.Leaf(leafClusterName)
+	}
+
+	return clusterURI, nil
 }

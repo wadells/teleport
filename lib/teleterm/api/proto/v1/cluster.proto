@@ -12,8 +12,10 @@ message Cluster {
     string name = 2;
     // connected indicates if connection to the cluster has been established
     bool connected = 3;
+    // leaf indicates if this is a leaf cluster
+    bool leaf = 4;
     // User is the cluster access control list of the logged-in user
-    LoggedInUser logged_in_user = 4;
+    LoggedInUser logged_in_user = 5;
 }
 
 // LoggedInUser describes a logged-in user

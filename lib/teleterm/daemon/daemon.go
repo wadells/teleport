@@ -17,7 +17,7 @@ package daemon
 import (
 	"context"
 
-	"github.com/gravitational/teleport/lib/teleterm/api/uri"
+	apiuri "github.com/gravitational/teleport/lib/teleterm/api/uri"
 	"github.com/gravitational/teleport/lib/teleterm/clusters"
 	"github.com/gravitational/teleport/lib/teleterm/gateway"
 
@@ -30,6 +30,7 @@ type Database = clusters.Database
 type Server = clusters.Server
 type Kube = clusters.Kube
 type App = clusters.App
+type Leaf = clusters.LeafCluster
 
 // Start creates and starts a Teleport Terminal service.
 func New(cfg Config) (*Service, error) {
@@ -38,33 +39,36 @@ func New(cfg Config) (*Service, error) {
 	}
 
 	return &Service{
-		Config:   cfg,
-		clusters: map[string]*Cluster{},
+		Config: cfg,
 	}, nil
 }
 
-// Init loads clusters from saved profiles
-func (s *Service) Init() error {
+// GetRootClusters returns a list of existing clusters
+func (s *Service) GetRootClusters(ctx context.Context) ([]*Cluster, error) {
 	clusters, err := s.Storage.ReadAll()
 	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	for _, cluster := range clusters {
-		s.clusters[cluster.URI] = cluster
-	}
-
-	return nil
-}
-
-// GetClusters returns a list of existing clusters
-func (s *Service) GetClusters(ctx context.Context) ([]*Cluster, error) {
-	clusters := make([]*Cluster, 0, len(s.clusters))
-	for _, item := range s.clusters {
-		clusters = append(clusters, item)
+		return nil, trace.Wrap(err)
 	}
 
 	return clusters, nil
+}
+
+func (s *Service) ListLeafClusters(ctx context.Context, uri string) ([]Leaf, error) {
+	cluster, err := s.ResolveCluster(uri)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	if cluster.URI.GetLeafCluster() != "" {
+		return nil, nil
+	}
+
+	leaves, err := cluster.GetLeafClusters(ctx)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return leaves, nil
 }
 
 // AddCluster adds a cluster
@@ -74,14 +78,12 @@ func (s *Service) AddCluster(ctx context.Context, webProxyAddress string) (*Clus
 		return nil, trace.Wrap(err)
 	}
 
-	s.clusters[cluster.URI] = cluster
-
 	return cluster, nil
 }
 
 // RemoveCluster removes cluster
-func (s *Service) RemoveCluster(ctx context.Context, clusterURI string) error {
-	cluster, err := s.GetCluster(clusterURI)
+func (s *Service) RemoveCluster(ctx context.Context, uri string) error {
+	cluster, err := s.ResolveCluster(uri)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -96,23 +98,27 @@ func (s *Service) RemoveCluster(ctx context.Context, clusterURI string) error {
 		return trace.Wrap(err)
 	}
 
-	// remote from map
-	delete(s.clusters, clusterURI)
-
 	return nil
 }
 
-// GetCluster returns a cluster by its name
-func (s *Service) GetCluster(clusterURI string) (*Cluster, error) {
-	if cluster, exists := s.clusters[clusterURI]; exists {
-		return cluster, nil
+// ResolveCluster returns a cluster by cluster resource URI
+func (s *Service) ResolveCluster(uri string) (*Cluster, error) {
+	clusterURI, err := apiuri.NewClusterFromResourceURI(uri)
+	if err != nil {
+		return nil, trace.Wrap(err)
 	}
 
-	return nil, trace.NotFound("cluster is not found: %v", clusterURI)
+	cluster, err := s.Storage.GetByURI(clusterURI.String())
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return cluster, nil
 }
 
-func (s *Service) ClusterLogout(ctx context.Context, clusterURI string) error {
-	cluster, err := s.GetCluster(clusterURI)
+// ClusterLogout logs a user out from the cluster
+func (s *Service) ClusterLogout(ctx context.Context, uri string) error {
+	cluster, err := s.ResolveCluster(uri)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -121,18 +127,12 @@ func (s *Service) ClusterLogout(ctx context.Context, clusterURI string) error {
 		return trace.Wrap(err)
 	}
 
-	// Re-init the cluster from its profile because logout has many side-effects
-	if s.clusters[cluster.URI], err = s.Storage.Read(cluster.Name); err != nil {
-		return trace.Wrap(err)
-	}
-
 	return nil
 }
 
-// CreateGateway creates a gateway
+// CreateGateway creates a gateway to given targetURI
 func (s *Service) CreateGateway(ctx context.Context, targetURI string, port string) (*Gateway, error) {
-	clusterUri := uri.Cluster(uri.Parse(targetURI).Cluster()).String()
-	cluster, err := s.GetCluster(clusterUri)
+	cluster, err := s.ResolveCluster(targetURI)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -142,12 +142,16 @@ func (s *Service) CreateGateway(ctx context.Context, targetURI string, port stri
 		return nil, trace.Wrap(err)
 	}
 
+	gateway.Open()
+
+	s.gateways = append(s.gateways, gateway)
+
 	return gateway, nil
 }
 
 // ListServers returns cluster servers
 func (s *Service) ListServers(ctx context.Context, clusterURI string) ([]Server, error) {
-	cluster, err := s.GetCluster(clusterURI)
+	cluster, err := s.ResolveCluster(clusterURI)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -162,7 +166,7 @@ func (s *Service) ListServers(ctx context.Context, clusterURI string) ([]Server,
 
 // ListServers returns cluster servers
 func (s *Service) ListApps(ctx context.Context, clusterURI string) ([]App, error) {
-	cluster, err := s.GetCluster(clusterURI)
+	cluster, err := s.ResolveCluster(clusterURI)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -177,22 +181,27 @@ func (s *Service) ListApps(ctx context.Context, clusterURI string) ([]App, error
 
 // RemoveGateway removes cluster gateway
 func (s *Service) RemoveGateway(ctx context.Context, gatewayURI string) error {
-	clusterID := uri.Parse(gatewayURI).Cluster()
-	cluster, err := s.GetCluster(uri.Cluster(clusterID).String())
+	gateway, err := s.FindGateway(gatewayURI)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	if err := cluster.RemoveGateway(ctx, gatewayURI); err != nil {
-		return trace.Wrap(err)
+	gateway.Close()
+
+	// remove closed gateway from list
+	for index := range s.gateways {
+		if s.gateways[index] == gateway {
+			s.gateways = append(s.gateways[:index], s.gateways[index+1:]...)
+			return nil
+		}
 	}
 
 	return nil
 }
 
 // ListKubes lists k8s clusters
-func (s *Service) ListKubes(ctx context.Context, clusterURI string) ([]Kube, error) {
-	cluster, err := s.GetCluster(clusterURI)
+func (s *Service) ListKubes(ctx context.Context, uri string) ([]Kube, error) {
+	cluster, err := s.ResolveCluster(uri)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -205,25 +214,32 @@ func (s *Service) ListKubes(ctx context.Context, clusterURI string) ([]Kube, err
 	return kubes, nil
 }
 
-// ListGateways lists gateways
-func (s *Service) ListGateways(ctx context.Context) ([]*Gateway, error) {
-	gws := []*Gateway{}
-	for _, cluster := range s.clusters {
-		gws = append(gws, cluster.GetGateways()...)
+// FindGateway finds a gateway by URI
+func (s *Service) FindGateway(gatewayURI string) (*Gateway, error) {
+	for _, gateway := range s.gateways {
+		if gateway.URI.String() == gatewayURI {
+			return gateway, nil
+		}
 	}
 
-	return gws, nil
+	return nil, trace.NotFound("gateway is not found: %v", gatewayURI)
+}
+
+// ListGateways lists gateways
+func (s *Service) ListGateways(ctx context.Context) ([]*Gateway, error) {
+	return s.gateways, nil
 }
 
 // Stop terminates all cluster open connections
 func (s *Service) Stop() {
-	for _, cluster := range s.clusters {
-		cluster.CloseConnections()
+	for _, gateway := range s.gateways {
+		gateway.Close()
 	}
 }
 
 // Service is the cluster service
 type Service struct {
 	Config
-	clusters map[string]*Cluster
+	// gateways is the cluster gateways
+	gateways []*gateway.Gateway
 }

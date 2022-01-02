@@ -35,12 +35,22 @@ import (
 
 func TestMain(m *testing.M) {
 	utils.InitLoggerForTests()
-	log.SetFormatter(&trace.TextFormatter{})
+	log.SetFormatter(&trace.JSONFormatter{})
 	os.Exit(m.Run())
 
 }
 
 func TestHandler(t *testing.T) {
+	//utils.InitLoggerForTests()
+	//	logger := utils.NewLoggerForTests()
+	//	logger.SetFormatter(&trace.JSONFormatter{})
+
+	logger := log.New()
+	logger.ReplaceHooks(make(log.LevelHooks))
+	logger.SetFormatter(&trace.TextFormatter{})
+	logger.SetLevel(log.DebugLevel)
+	logger.SetOutput(os.Stderr)
+
 	storage, err := clusters.New(clusters.Config{
 		Dir:                t.TempDir(),
 		InsecureSkipVerify: true,
@@ -62,12 +72,7 @@ func TestHandler(t *testing.T) {
 		Name: "localhost:4080",
 	})
 	require.NoError(t, err)
-
 	require.False(t, cluster1.Connected)
-
-	response, err := h.ListClusters(context.TODO(), &api.ListClustersRequest{})
-	require.NoError(t, err)
-	require.Len(t, response.Clusters, 1)
 
 	_, err = h.Login(context.TODO(), &api.LoginRequest{
 		ClusterUri: "/clusters/localhost",
@@ -76,13 +81,15 @@ func TestHandler(t *testing.T) {
 			ProviderName: "google",
 		},
 	})
+
 	require.NoError(t, err)
 
-	//kubes, err := h.DaemonService.ListKubes(context.TODO(), "/clusters/asteroid-moon.teleport.sh")
-	//fmt.Print("KUBES: ", kubes)
+	leaves, err := h.DaemonService.ListLeafClusters(context.TODO(), "/clusters/localhost/leaves/tc")
+	fmt.Print("KUBES: ", leaves)
+	require.NoError(t, err)
 
-	apps, err := h.DaemonService.ListKubes(context.TODO(), "/clusters/localhost")
-	fmt.Print("KUBES: ", apps)
+	c1, err := h.DaemonService.GetCluster("/clusters/localhost/leaves/tc")
+	fmt.Print("\n\n\n\n KUBES: ", c1)
 
 	require.Error(t, err)
 }
@@ -113,7 +120,7 @@ func FTestHandler(t *testing.T) {
 	require.Equal(t, cluster1.Name, "asteroid-moon.teleport.sh")
 	require.False(t, cluster1.Connected)
 
-	response, err := h.ListClusters(context.TODO(), &api.ListClustersRequest{})
+	response, err := h.ListRootClusters(context.TODO(), &api.ListClustersRequest{})
 	require.NoError(t, err)
 	require.Len(t, response.Clusters, 1)
 
@@ -179,7 +186,7 @@ func LocalTestHandler(t *testing.T) {
 	require.Equal(t, cluster1.Name, "localhost")
 	require.False(t, cluster1.Connected)
 
-	response, err := h.ListClusters(context.TODO(), &api.ListClustersRequest{})
+	response, err := h.ListRootClusters(context.TODO(), &api.ListClustersRequest{})
 	require.NoError(t, err)
 	require.Len(t, response.Clusters, 1)
 

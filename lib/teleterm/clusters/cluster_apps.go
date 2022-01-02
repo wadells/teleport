@@ -27,8 +27,9 @@ import (
 
 // Database describes database
 type App struct {
-	// URI is the database URI
-	URI string `json:"uri"`
+	// URI is the app URI
+	URI uri.ResourceURI
+
 	types.Application
 }
 
@@ -43,7 +44,7 @@ func (c *Cluster) GetApps(ctx context.Context) ([]App, error) {
 	results := []App{}
 	for _, app := range apps {
 		results = append(results, App{
-			URI:         uri.Cluster(c.status.Name).App(app.GetName()).String(),
+			URI:         c.URI.App(app.GetName()),
 			Application: app,
 		})
 	}

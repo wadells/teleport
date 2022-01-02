@@ -33,7 +33,7 @@ import (
 
 func TestURI(t *testing.T) {
 	testCases := []struct {
-		in  *uri.ResourceURI
+		in  uri.ResourceURI
 		out string
 	}{
 		{
@@ -45,7 +45,7 @@ func TestURI(t *testing.T) {
 			"/clusters/teleport.sh/apps/app1",
 		},
 		{
-			uri.Cluster("teleport.sh").DBHost("dbhost1"),
+			uri.Cluster("teleport.sh").DB("dbhost1"),
 			"/clusters/teleport.sh/dbs/dbhost1",
 		},
 	}

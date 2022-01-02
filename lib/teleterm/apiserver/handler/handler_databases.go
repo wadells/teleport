@@ -26,7 +26,7 @@ import (
 
 // ListDatabases lists databases of the specific cluster
 func (s *Handler) ListDatabases(ctx context.Context, req *api.ListDatabasesRequest) (*api.ListDatabasesResponse, error) {
-	cluster, err := s.DaemonService.GetCluster(req.ClusterUri)
+	cluster, err := s.DaemonService.ResolveCluster(req.ClusterUri)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -56,7 +56,7 @@ func newAPIDatabase(db daemon.Database) *api.Database {
 	sort.Sort(apiLabels)
 
 	return &api.Database{
-		Uri:      db.URI,
+		Uri:      db.URI.String(),
 		Name:     db.GetName(),
 		Desc:     db.GetDescription(),
 		Protocol: db.GetProtocol(),

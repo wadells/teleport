@@ -19,39 +19,43 @@ package clusters
 import (
 	"context"
 
-	"github.com/gravitational/teleport/api/defaults"
-	"github.com/gravitational/teleport/api/types"
+	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/lib/teleterm/api/uri"
 
 	"github.com/gravitational/trace"
 )
 
-// Database describes database
-type Server struct {
-	// URI is the database URI
+// LeafCluster describes leaf (remote) cluster
+type LeafCluster struct {
+	// URI is the leaf cluster URI
 	URI uri.ResourceURI
-
-	types.Server
+	// LoggedInUser is the logged in user
+	LoggedInUser LoggedInUser
+	// Name is the leaf cluster name
+	Name string
+	// Connected indicates if this leaf cluster is connected
+	Connected bool
 }
 
-// GetDatabase returns a database
-func (c *Cluster) GetServers(ctx context.Context) ([]Server, error) {
+func (c *Cluster) GetLeafClusters(ctx context.Context) ([]LeafCluster, error) {
+	//c.clusterClient.SiteName = trustedCluster
 	proxyClient, err := c.clusterClient.ConnectToProxy(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	defer proxyClient.Close()
 
-	clusterServers, err := proxyClient.FindServersByLabels(ctx, defaults.Namespace, nil)
+	remoteClusters, err := proxyClient.GetLeafClusters(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	results := []Server{}
-	for _, server := range clusterServers {
-		results = append(results, Server{
-			URI:    c.URI.Server(server.GetName()),
-			Server: server,
+	results := []LeafCluster{}
+	for _, remoteCluster := range remoteClusters {
+		results = append(results, LeafCluster{
+			URI:          c.URI.Leaf(remoteCluster.GetName()),
+			Connected:    remoteCluster.GetConnectionStatus() == teleport.RemoteClusterStatusOnline,
+			LoggedInUser: c.GetLoggedInUser(),
 		})
 	}
 
