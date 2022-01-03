@@ -120,7 +120,7 @@ type Match struct {
 // an indication that the path accepts trailing segments, and not included in
 // the Segments of the return value. Instead, Trailing in the return value is
 // marked as true.
-func New(path string) Path {
+func NewPath(path string) Path {
 	inSegments := strings.Split(path, "/")
 	trailing := inSegments[len(inSegments)-1] == "*"
 

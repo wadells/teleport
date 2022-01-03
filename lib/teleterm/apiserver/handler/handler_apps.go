@@ -50,7 +50,7 @@ func newAPIApp(app daemon.App) *api.App {
 	sort.Sort(apiLabels)
 
 	return &api.App{
-		Uri:         app.URI,
+		Uri:         app.URI.String(),
 		Name:        app.GetName(),
 		Labels:      apiLabels,
 		Description: app.GetDescription(),

@@ -21,7 +21,7 @@ import (
 
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/client"
-	"github.com/gravitational/teleport/lib/teleterm/gateway"
+	"github.com/gravitational/teleport/lib/teleterm/api/uri"
 
 	"github.com/gravitational/trace"
 
@@ -32,9 +32,10 @@ import (
 // Cluster describes user settings and access to various resources.
 type Cluster struct {
 	// URI is the cluster URI
-	URI string
+	URI uri.ResourceURI
 	// Name is the cluster name
 	Name string
+
 	// Log is a component logger
 	Log logrus.FieldLogger
 	// dir is the directory where cluster certificates are stored
@@ -45,20 +46,11 @@ type Cluster struct {
 	clusterClient *client.TeleportClient
 	// clock is a clock for time-related operations
 	clock clockwork.Clock
-	// gateways is the cluster gateways
-	gateways []*gateway.Gateway
 }
 
 // Connected indicates if connection to the cluster can be established
 func (c *Cluster) Connected() bool {
 	return c.status.Name != "" && !c.status.IsExpired(c.clock)
-}
-
-// CloseConnections closes all cluster connections
-func (c *Cluster) CloseConnections() {
-	for _, gateway := range c.gateways {
-		gateway.Close()
-	}
 }
 
 // GetRoles returns currently logged-in user roles

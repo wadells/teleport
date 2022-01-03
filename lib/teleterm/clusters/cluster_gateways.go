@@ -39,10 +39,10 @@ func (c *Cluster) CreateGateway(ctx context.Context, dbURI, port, user string) (
 		return nil, trace.Wrap(err)
 	}
 
-	gwURI := uri.Cluster(uri.Parse(dbURI).Cluster()).Gateway(uuid.NewString())
+	gwURI := uri.NewGateway(uuid.NewString())
 	gw, err := gateway.New(gateway.Config{
 		URI:          gwURI,
-		HostID:       uri.Parse(dbURI).DB(),
+		HostID:       uri.New(dbURI).GetDB(),
 		LocalPort:    port,
 		ResourceName: db.GetName(),
 		Protocol:     db.GetProtocol(),
@@ -58,45 +58,5 @@ func (c *Cluster) CreateGateway(ctx context.Context, dbURI, port, user string) (
 		return nil, trace.Wrap(err)
 	}
 
-	c.gateways = append(c.gateways, gw)
-
-	gw.Open()
-
 	return gw, nil
-}
-
-// RemoveGateway removes Cluster gateway
-func (c *Cluster) RemoveGateway(ctx context.Context, gatewayURI string) error {
-	gateway, err := c.FindGateway(gatewayURI)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	gateway.Close()
-
-	// remove closed gateway from list
-	for index := range c.gateways {
-		if c.gateways[index] == gateway {
-			c.gateways = append(c.gateways[:index], c.gateways[index+1:]...)
-			return nil
-		}
-	}
-
-	return nil
-}
-
-// FindGateway finds gateway by URI
-func (c *Cluster) FindGateway(gatewayURI string) (*Gateway, error) {
-	for _, gateway := range c.GetGateways() {
-		if gateway.URI.String() == gatewayURI {
-			return gateway, nil
-		}
-	}
-
-	return nil, trace.NotFound("gateway is not found: %v", gatewayURI)
-}
-
-// GetGateways returns a list of cluster gateways
-func (c *Cluster) GetGateways() []*gateway.Gateway {
-	return c.gateways
 }

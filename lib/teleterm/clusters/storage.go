@@ -54,12 +54,32 @@ func (s *Storage) ReadAll() ([]*Cluster, error) {
 	return clusters, nil
 }
 
-// Init loads clusters from saved profiles
-func (s *Storage) Read(clusterName string) (*Cluster, error) {
+// GetByName returns a cluster by its name
+func (s *Storage) GetByName(clusterName string) (*Cluster, error) {
 	cluster, err := s.fromProfile(clusterName)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+
+	return cluster, nil
+}
+
+// GetByURI returns a cluster by its URI
+func (s *Storage) GetByURI(clusterURI string) (*Cluster, error) {
+	URI := uri.New(clusterURI)
+	rootClusterName := URI.GetCluster()
+	leafClusterName := URI.GetLeafCluster()
+
+	cluster, err := s.fromProfile(rootClusterName)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	if leafClusterName != "" {
+		cluster.clusterClient.SiteName = leafClusterName
+	}
+
+	cluster.URI = URI
 
 	return cluster, nil
 }
@@ -112,7 +132,6 @@ func (s *Storage) addCluster(ctx context.Context, dir, webProxyAddress string) (
 	cfg.InsecureSkipVerify = s.InsecureSkipVerify
 
 	clusterName := parseName(webProxyAddress)
-	clusterURI := uri.Cluster(clusterName).String()
 	clusterClient, err := client.NewClient(cfg)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -127,6 +146,8 @@ func (s *Storage) addCluster(ctx context.Context, dir, webProxyAddress string) (
 	if err := cfg.SaveProfile(s.Dir, false); err != nil {
 		return nil, trace.Wrap(err)
 	}
+
+	clusterURI := uri.NewCluster(clusterName)
 
 	return &Cluster{
 		URI:           clusterURI,
@@ -180,7 +201,7 @@ func (s *Storage) fromProfile(clusterName string) (*Cluster, error) {
 		return nil, trace.Wrap(err)
 	}
 
-	clusterURI := uri.Cluster(clusterName).String()
+	clusterURI := uri.NewCluster(clusterName)
 	return &Cluster{
 		URI:           clusterURI,
 		Name:          clusterName,

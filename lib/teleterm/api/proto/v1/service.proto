@@ -14,8 +14,10 @@ import "v1/server.proto";
 import "v1/auth_settings.proto";
 
 service TerminalService {
-    // ListClusters
-    rpc ListClusters(ListClustersRequest) returns (ListClustersResponse);
+    // ListRootClusters
+    rpc ListRootClusters(ListClustersRequest) returns (ListClustersResponse);
+    // ListLeafClusters
+    rpc ListLeafClusters(ListLeafClustersRequest) returns (ListClustersResponse);
     // ListDatabases
     rpc ListDatabases(ListDatabasesRequest) returns (ListDatabasesResponse);
     // ListGateways
@@ -70,15 +72,18 @@ message LoginRequest {
 
 message AddClusterRequest { string name = 1; }
 
-message ListKubesRequest { string cluster_uri = 3; }
+message ListKubesRequest { string cluster_uri = 1; }
 
-message ListAppsRequest { string cluster_uri = 3; }
+message ListAppsRequest { string cluster_uri = 1; }
 
 message ListClustersRequest {}
 
 message ListClustersResponse { repeated Cluster clusters = 1; }
 
-message ListDatabasesRequest { string cluster_uri = 3; }
+message ListDatabasesRequest { string cluster_uri = 1; }
+
+message ListLeafClustersRequest { string cluster_uri = 1; }
+
 
 message ListDatabasesResponse { repeated Database databases = 1; }
 
@@ -87,7 +92,7 @@ message CreateGatewayRequest {
     string port = 2;
 }
 
-message ListGatewaysRequest { repeated string cluster_ids = 3; }
+message ListGatewaysRequest { repeated string cluster_ids = 1; }
 
 message ListGatewaysResponse { repeated Gateway gateways = 1; }
 

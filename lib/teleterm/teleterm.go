@@ -38,16 +38,15 @@ func Start(ctx context.Context, cfg Config) error {
 		Dir:                cfg.HomeDir,
 		InsecureSkipVerify: cfg.InsecureSkipVerify,
 	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
 
 	daemonService, err := daemon.New(daemon.Config{
 		Storage:            storage,
 		InsecureSkipVerify: cfg.InsecureSkipVerify,
 	})
 	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	if err := daemonService.Init(); err != nil {
 		return trace.Wrap(err)
 	}
 

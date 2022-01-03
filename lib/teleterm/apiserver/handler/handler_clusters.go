@@ -23,21 +23,36 @@ import (
 	"github.com/gravitational/teleport/lib/teleterm/daemon"
 )
 
-// Lists all existing clusters
-func (s *Handler) ListClusters(ctx context.Context, r *api.ListClustersRequest) (*api.ListClustersResponse, error) {
-	clusters, err := s.DaemonService.GetClusters(ctx)
+// ListRootClusters lists root clusters
+func (s *Handler) ListRootClusters(ctx context.Context, r *api.ListClustersRequest) (*api.ListClustersResponse, error) {
+	clusters, err := s.DaemonService.GetRootClusters(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
 	result := []*api.Cluster{}
 	for _, cluster := range clusters {
-		result = append(result, newAPICluster(cluster))
+		result = append(result, newAPIRootCluster(cluster))
 	}
 
 	return &api.ListClustersResponse{
 		Clusters: result,
 	}, nil
+}
+
+// ListLeafClusters lists leaf clusters
+func (s *Handler) ListLeafClusters(ctx context.Context, req *api.ListLeafClustersRequest) (*api.ListClustersResponse, error) {
+	leaves, err := s.DaemonService.ListLeafClusters(ctx, req.ClusterUri)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	response := &api.ListClustersResponse{}
+	for _, leaf := range leaves {
+		response.Clusters = append(response.Clusters, newAPILeafCluster(leaf))
+	}
+
+	return response, nil
 }
 
 // AddCluster creates a new cluster
@@ -47,7 +62,7 @@ func (s *Handler) AddCluster(ctx context.Context, req *api.AddClusterRequest) (*
 		return nil, trace.Wrap(err)
 	}
 
-	return newAPICluster(cluster), nil
+	return newAPIRootCluster(cluster), nil
 }
 
 // RemoveCluster removes a cluster from local system
@@ -61,24 +76,38 @@ func (s *Handler) RemoveCluster(ctx context.Context, req *api.RemoveClusterReque
 
 // GetCluster returns a cluster
 func (s *Handler) GetCluster(ctx context.Context, req *api.GetClusterRequest) (*api.Cluster, error) {
-	cluster, err := s.DaemonService.GetCluster(req.ClusterUri)
+	cluster, err := s.DaemonService.ResolveCluster(req.ClusterUri)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	return newAPICluster(cluster), nil
+	return newAPIRootCluster(cluster), nil
 }
 
-func newAPICluster(cluster *daemon.Cluster) *api.Cluster {
+func newAPIRootCluster(cluster *daemon.Cluster) *api.Cluster {
 	loggedInUser := cluster.GetLoggedInUser()
 	return &api.Cluster{
-		Uri:       cluster.URI,
+		Uri:       cluster.URI.String(),
 		Name:      cluster.Name,
 		Connected: cluster.Connected(),
 		LoggedInUser: &api.LoggedInUser{
 			Name:      loggedInUser.Name,
 			SshLogins: loggedInUser.SSHLogins,
 			Roles:     loggedInUser.Roles,
+		},
+	}
+}
+
+func newAPILeafCluster(leaf daemon.Leaf) *api.Cluster {
+	return &api.Cluster{
+		Name:      leaf.Name,
+		Uri:       leaf.URI.String(),
+		Connected: leaf.Connected,
+		Leaf:      true,
+		LoggedInUser: &api.LoggedInUser{
+			Name:      leaf.LoggedInUser.Name,
+			SshLogins: leaf.LoggedInUser.SSHLogins,
+			Roles:     leaf.LoggedInUser.Roles,
 		},
 	}
 }

@@ -59,7 +59,7 @@ func newAPIServer(server daemon.Server) *api.Server {
 	sort.Sort(apiLabels)
 
 	return &api.Server{
-		Uri:      server.URI,
+		Uri:      server.URI.String(),
 		Tunnel:   server.GetUseTunnel(),
 		Name:     server.GetName(),
 		Hostname: server.GetHostname(),

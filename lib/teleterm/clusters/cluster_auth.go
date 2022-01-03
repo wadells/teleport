@@ -52,11 +52,6 @@ func (c *Cluster) SyncAuthPreference(ctx context.Context) (*web.WebConfigAuthSet
 
 // Logout deletes all cluster certificates
 func (c *Cluster) Logout(ctx context.Context) error {
-	// Close open gateways
-	for _, gw := range c.gateways {
-		gw.Close()
-	}
-
 	// Delete db certs
 	for _, db := range c.status.Databases {
 		err := dbprofile.Delete(c.clusterClient, db)
@@ -92,6 +87,10 @@ func (c *Cluster) LocalLogin(ctx context.Context, user, password, otpToken strin
 		return trace.Wrap(err)
 	}
 
+	// TODO(alex-kovoy): SiteName needs to be reset if trying to login to a cluster with
+	// existing profile for the first time (investigate why)
+	c.clusterClient.SiteName = ""
+
 	switch pingResp.Auth.SecondFactor {
 	case constants.SecondFactorOff, constants.SecondFactorOTP:
 		err := c.localLogin(ctx, user, password, otpToken)
@@ -120,6 +119,10 @@ func (c *Cluster) SSOLogin(ctx context.Context, providerType, providerName strin
 	if err != nil {
 		return trace.Wrap(err)
 	}
+
+	// TODO(alex-kovoy): SiteName needs to be reset if trying to login to a cluster with
+	// existing profile for the first time (investigate why)
+	c.clusterClient.SiteName = ""
 
 	response, err := client.SSHAgentSSOLogin(ctx, client.SSHLoginSSO{
 		SSHLogin: client.SSHLogin{

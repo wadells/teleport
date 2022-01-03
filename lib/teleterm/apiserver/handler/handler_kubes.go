@@ -58,7 +58,7 @@ func newAPIKube(kube daemon.Kube) *api.Kube {
 
 	return &api.Kube{
 		Name:   kube.Name,
-		Uri:    kube.URI,
+		Uri:    kube.URI.String(),
 		Labels: apiLabels,
 	}
 }

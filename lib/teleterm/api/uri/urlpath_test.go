@@ -106,7 +106,7 @@ func TestURLPath(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.in, func(t *testing.T) {
-			out := uri.New(tt.in)
+			out := uri.NewPath(tt.in)
 
 			if !reflect.DeepEqual(out, tt.out) {
 				t.Errorf("out %#v, want %#v", out, tt.out)
@@ -163,14 +163,12 @@ func TestMatch(t *testing.T) {
 			uri.Match{},
 			false,
 		},
-
 		{
 			"/:foo/:bar/:baz",
 			"/foo/bar/baz",
 			uri.Match{Params: map[string]string{"foo": "foo", "bar": "bar", "baz": "baz"}, Trailing: ""},
 			true,
 		},
-
 		{
 			"/:foo/:bar/:baz",
 			"///",
@@ -371,7 +369,7 @@ func TestMatch(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(fmt.Sprintf("%s/%s", tt.Path, tt.in), func(t *testing.T) {
-			path := uri.New(tt.Path)
+			path := uri.NewPath(tt.Path)
 			out, ok := path.Match(tt.in)
 
 			if !reflect.DeepEqual(out, tt.out) {
