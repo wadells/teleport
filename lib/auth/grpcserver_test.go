@@ -45,6 +45,7 @@ import (
 	"github.com/gravitational/teleport/lib/tlsca"
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
+	"github.com/pborman/uuid"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
@@ -261,7 +262,7 @@ func TestMFADeviceManagement(t *testing.T) {
 				},
 				checkAuthErr: func(t require.TestingT, err error, i ...interface{}) {
 					require.Error(t, err)
-					require.Equal(t, codes.InvalidArgument, status.Code(err))
+					require.Equal(t, codes.PermissionDenied, status.Code(err))
 				},
 			},
 		},
@@ -1583,34 +1584,52 @@ func TestNodesCRUD(t *testing.T) {
 		t.Run("List Nodes", func(t *testing.T) {
 			t.Parallel()
 			// list nodes one at a time, last page should be empty
-			nodes, nextKey, err := clt.ListNodes(ctx, apidefaults.Namespace, 1, "")
+			nodes, nextKey, err := clt.ListNodes(ctx, proto.ListNodesRequest{
+				Namespace: apidefaults.Namespace,
+				Limit:     1,
+			})
 			require.NoError(t, err)
 			require.Len(t, nodes, 1)
 			require.Empty(t, cmp.Diff([]types.Server{node1}, nodes,
 				cmpopts.IgnoreFields(types.Metadata{}, "ID")))
 			require.Equal(t, backend.NextPaginationKey(node1), nextKey)
 
-			nodes, nextKey, err = clt.ListNodes(ctx, apidefaults.Namespace, 1, nextKey)
+			nodes, nextKey, err = clt.ListNodes(ctx, proto.ListNodesRequest{
+				Namespace: apidefaults.Namespace,
+				Limit:     1,
+				StartKey:  nextKey,
+			})
 			require.NoError(t, err)
 			require.Len(t, nodes, 1)
 			require.Empty(t, cmp.Diff([]types.Server{node2}, nodes,
 				cmpopts.IgnoreFields(types.Metadata{}, "ID")))
 			require.Equal(t, backend.NextPaginationKey(node2), nextKey)
 
-			nodes, nextKey, err = clt.ListNodes(ctx, apidefaults.Namespace, 1, nextKey)
+			nodes, nextKey, err = clt.ListNodes(ctx, proto.ListNodesRequest{
+				Namespace: apidefaults.Namespace,
+				Limit:     1,
+				StartKey:  nextKey,
+			})
 			require.NoError(t, err)
 			require.Empty(t, nodes)
 			require.Equal(t, "", nextKey)
 
 			// ListNodes should fail if namespace isn't provided
-			_, _, err = clt.ListNodes(ctx, "", 1, "")
+			_, _, err = clt.ListNodes(ctx, proto.ListNodesRequest{
+				Limit: 1,
+			})
 			require.IsType(t, &trace.BadParameterError{}, err.(*trace.TraceErr).OrigError())
 
 			// ListNodes should fail if limit is nonpositive
-			_, _, err = clt.ListNodes(ctx, apidefaults.Namespace, 0, "")
+			_, _, err = clt.ListNodes(ctx, proto.ListNodesRequest{
+				Namespace: apidefaults.Namespace,
+			})
 			require.IsType(t, &trace.BadParameterError{}, err.(*trace.TraceErr).OrigError())
 
-			_, _, err = clt.ListNodes(ctx, apidefaults.Namespace, -1, "")
+			_, _, err = clt.ListNodes(ctx, proto.ListNodesRequest{
+				Namespace: apidefaults.Namespace,
+				Limit:     -1,
+			})
 			require.IsType(t, &trace.BadParameterError{}, err.(*trace.TraceErr).OrigError())
 		})
 		t.Run("GetNodes", func(t *testing.T) {
@@ -2053,6 +2072,104 @@ func TestDatabasesCRUD(t *testing.T) {
 	require.Len(t, out, 0)
 }
 
+func TestListResources(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	srv := newTestTLSServer(t)
+
+	clt, err := srv.NewClient(TestAdmin())
+	require.NoError(t, err)
+
+	testCases := map[string]struct {
+		resourceType   string
+		createResource func(name string) error
+	}{
+		"DatabaseServers": {
+			resourceType: types.KindDatabaseServer,
+			createResource: func(name string) error {
+				server, err := types.NewDatabaseServerV3(types.Metadata{
+					Name: name,
+				}, types.DatabaseServerSpecV3{
+					Protocol: defaults.ProtocolPostgres,
+					URI:      "localhost:5432",
+					Hostname: "localhost",
+					HostID:   uuid.New(),
+				})
+				if err != nil {
+					return err
+				}
+
+				_, err = clt.UpsertDatabaseServer(ctx, server)
+				return err
+			},
+		},
+		"ApplicationServers": {
+			resourceType: types.KindAppServer,
+			createResource: func(name string) error {
+				app, err := types.NewAppV3(types.Metadata{
+					Name: name,
+				}, types.AppSpecV3{
+					URI: "localhost",
+				})
+				if err != nil {
+					return err
+				}
+
+				server, err := types.NewAppServerV3(types.Metadata{
+					Name: name,
+				}, types.AppServerSpecV3{
+					Hostname: "localhost",
+					HostID:   uuid.New(),
+					App:      app,
+				})
+				if err != nil {
+					return err
+				}
+
+				_, err = clt.UpsertApplicationServer(ctx, server)
+				return err
+			},
+		},
+	}
+
+	for name, test := range testCases {
+		t.Run(name, func(t *testing.T) {
+			resources, nextKey, err := clt.ListResources(ctx, proto.ListResourcesRequest{
+				ResourceType: test.resourceType,
+				Namespace:    apidefaults.Namespace,
+				Limit:        100,
+			})
+			require.NoError(t, err)
+			require.Len(t, resources, 0)
+			require.Empty(t, nextKey)
+
+			// create two resources
+			err = test.createResource("foo")
+			require.NoError(t, err)
+			err = test.createResource("bar")
+			require.NoError(t, err)
+
+			resources, nextKey, err = clt.ListResources(ctx, proto.ListResourcesRequest{
+				ResourceType: test.resourceType,
+				Namespace:    apidefaults.Namespace,
+				Limit:        100,
+			})
+			require.NoError(t, err)
+			require.Len(t, resources, 2)
+			require.Empty(t, nextKey)
+		})
+	}
+
+	t.Run("InvalidResourceType", func(t *testing.T) {
+		_, _, err := clt.ListResources(ctx, proto.ListResourcesRequest{
+			ResourceType: "",
+			Namespace:    apidefaults.Namespace,
+			Limit:        100,
+		})
+		require.Error(t, err)
+	})
+}
+
 func TestCustomRateLimiting(t *testing.T) {
 	t.Parallel()
 
@@ -2060,13 +2177,6 @@ func TestCustomRateLimiting(t *testing.T) {
 		name string
 		fn   func(*Client) error
 	}{
-		{
-			name: "RPC ApproveAccountRecovery",
-			fn: func(clt *Client) error {
-				_, err := clt.ApproveAccountRecovery(context.Background(), &proto.ApproveAccountRecoveryRequest{})
-				return err
-			},
-		},
 		{
 			name: "RPC ChangeUserAuthentication",
 			fn: func(clt *Client) error {
@@ -2085,6 +2195,13 @@ func TestCustomRateLimiting(t *testing.T) {
 			name: "RPC StartAccountRecovery",
 			fn: func(clt *Client) error {
 				_, err := clt.StartAccountRecovery(context.Background(), &proto.StartAccountRecoveryRequest{})
+				return err
+			},
+		},
+		{
+			name: "RPC VerifyAccountRecovery",
+			fn: func(clt *Client) error {
+				_, err := clt.VerifyAccountRecovery(context.Background(), &proto.VerifyAccountRecoveryRequest{})
 				return err
 			},
 		},

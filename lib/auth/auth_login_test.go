@@ -27,6 +27,7 @@ import (
 	"github.com/tstranex/u2f"
 
 	wanlib "github.com/gravitational/teleport/lib/auth/webauthn"
+	"github.com/gravitational/teleport/lib/defaults"
 )
 
 func TestServer_CreateAuthenticateChallenge_authPreference(t *testing.T) {
@@ -136,22 +137,6 @@ func TestServer_CreateAuthenticateChallenge_authPreference(t *testing.T) {
 				require.Empty(t, challenge.GetU2F())
 				require.NotEmpty(t, challenge.GetWebauthnChallenge())
 				require.Equal(t, "myexplicitid", challenge.GetWebauthnChallenge().GetPublicKey().GetRpId())
-			},
-		},
-		{
-			name: "OK second_factor:webauthn (derived from U2F)",
-			spec: &types.AuthPreferenceSpecV2{
-				Type:         constants.Local,
-				SecondFactor: constants.SecondFactorWebauthn,
-				U2F: &types.U2F{
-					AppID:  "https://localhost",
-					Facets: []string{"https://localhost"},
-				},
-			},
-			assertChallenge: func(challenge *proto.MFAAuthenticateChallenge) {
-				require.Empty(t, challenge.GetTOTP())
-				require.Empty(t, challenge.GetU2F())
-				require.NotEmpty(t, challenge.GetWebauthnChallenge())
 			},
 		},
 		{
@@ -382,13 +367,40 @@ func TestCreateAuthenticateChallenge_WithUserCredentials(t *testing.T) {
 
 			switch {
 			case tc.wantErr:
-				require.True(t, trace.IsAccessDenied(err))
+				require.Error(t, err)
 			default:
 				require.NoError(t, err)
 				require.NotNil(t, res.GetTOTP())
 				require.NotEmpty(t, res.GetU2F())
+				require.NotEmpty(t, res.GetWebauthnChallenge())
 			}
 		})
+	}
+}
+
+func TestCreateAuthenticateChallenge_WithUserCredentials_WithLock(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	srv := newTestTLSServer(t)
+
+	u, err := createUserWithSecondFactors(srv)
+	require.NoError(t, err)
+
+	for i := 1; i <= defaults.MaxLoginAttempts; i++ {
+		_, err = srv.Auth().CreateAuthenticateChallenge(ctx, &proto.CreateAuthenticateChallengeRequest{
+			Request: &proto.CreateAuthenticateChallengeRequest_UserCredentials{UserCredentials: &proto.UserCredentials{
+				Username: u.username,
+				Password: []byte("invalid-password"),
+			}},
+		})
+		require.Error(t, err)
+
+		// Test last attempt returns locked error.
+		if i == defaults.MaxLoginAttempts {
+			require.Equal(t, err.Error(), MaxFailedAttemptsErrMsg)
+		} else {
+			require.NotEqual(t, err.Error(), MaxFailedAttemptsErrMsg)
+		}
 	}
 }
 
@@ -452,6 +464,77 @@ func TestCreateAuthenticateChallenge_WithRecoveryStartToken(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, res.GetTOTP())
 				require.NotEmpty(t, res.GetU2F())
+				require.NotEmpty(t, res.GetWebauthnChallenge())
+			}
+		})
+	}
+}
+
+func TestCreateRegisterChallenge(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	srv := newTestTLSServer(t)
+
+	u, err := createUserWithSecondFactors(srv)
+	require.NoError(t, err)
+
+	// Test invalid token type.
+	wrongToken, err := srv.Auth().createRecoveryToken(ctx, u.username, UserTokenTypeRecoveryStart, types.UserTokenUsage_USER_TOKEN_RECOVER_PASSWORD)
+	require.NoError(t, err)
+	_, err = srv.Auth().CreateRegisterChallenge(ctx, &proto.CreateRegisterChallengeRequest{
+		TokenID:    wrongToken.GetName(),
+		DeviceType: proto.DeviceType_DEVICE_TYPE_TOTP,
+	})
+	require.True(t, trace.IsAccessDenied(err))
+
+	// Create a valid token.
+	validToken, err := srv.Auth().createRecoveryToken(ctx, u.username, UserTokenTypeRecoveryApproved, types.UserTokenUsage_USER_TOKEN_RECOVER_PASSWORD)
+	require.NoError(t, err)
+
+	// Test unspecified token returns error.
+	_, err = srv.Auth().CreateRegisterChallenge(ctx, &proto.CreateRegisterChallengeRequest{
+		TokenID: validToken.GetName(),
+	})
+	require.True(t, trace.IsBadParameter(err))
+
+	tests := []struct {
+		name       string
+		wantErr    bool
+		deviceType proto.DeviceType
+	}{
+		{
+			name:       "u2f challenge",
+			deviceType: proto.DeviceType_DEVICE_TYPE_U2F,
+		},
+		{
+			name:       "totp challenge",
+			deviceType: proto.DeviceType_DEVICE_TYPE_TOTP,
+		},
+		{
+			name:       "webauthn challenge",
+			deviceType: proto.DeviceType_DEVICE_TYPE_WEBAUTHN,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			res, err := srv.Auth().CreateRegisterChallenge(ctx, &proto.CreateRegisterChallengeRequest{
+				TokenID:    validToken.GetName(),
+				DeviceType: tc.deviceType,
+			})
+			require.NoError(t, err)
+
+			switch tc.deviceType {
+			case proto.DeviceType_DEVICE_TYPE_TOTP:
+				require.NotNil(t, res.GetTOTP().GetQRCode())
+
+			case proto.DeviceType_DEVICE_TYPE_U2F:
+				require.NotNil(t, res.GetU2F())
+
+			case proto.DeviceType_DEVICE_TYPE_WEBAUTHN:
+				require.NotNil(t, res.GetWebauthn())
 			}
 		})
 	}
