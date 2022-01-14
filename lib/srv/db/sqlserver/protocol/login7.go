@@ -11,38 +11,15 @@ import (
 	"github.com/gravitational/trace"
 )
 
-type OffsetLength struct {
-	ibHostName        uint16
-	cchHostName       uint16
-	ibUserName        uint16
-	cchUserName       uint16
-	ibPassword        uint16
-	cchPassword       uint16
-	ibAppName         uint16
-	cchAppName        uint16
-	ibServerName      uint16
-	cchServerName     uint16
-	ibUnused          uint16
-	cbUnused          uint16
-	ibCltIntName      uint16
-	cchCltIntName     uint16
-	ibLanguage        uint16
-	cchLanguage       uint16
-	ibDatabase        uint16 // offset
-	cchDatabase       uint16 // length
-	ClientID          []byte // 6-byte
-	ibSSPI            uint16
-	cbSSPI            uint16
-	ibAtchDBFile      uint16
-	cchAtchDBFile     uint16
-	ibChangePassword  uint16
-	cchChangePassword uint16
-	cbSSPILong        uint32
+type Login7Packet struct {
+	Packet   Packet
+	Fields   Login7PacketFields
+	Data     []byte
+	User     string
+	Database string
 }
 
-type Login7Packet struct {
-	Packet Packet
-
+type Login7PacketFields struct {
 	Length        uint32
 	TDSVersion    uint32
 	PacketSize    uint32
@@ -55,15 +32,35 @@ type Login7Packet struct {
 	TypeFlags    uint8
 	OptionFlags3 uint8
 
-	ClientTimezone uint32
+	ClientTimezone int32
 	ClientLCID     uint32
 
-	OffsetLength OffsetLength
-
-	Data []byte
-
-	User     string
-	Database string
+	IbHostName        uint16
+	CchHostName       uint16
+	IbUserName        uint16
+	CchUserName       uint16
+	IbPassword        uint16
+	CchPassword       uint16
+	IbAppName         uint16
+	CchAppName        uint16
+	IbServerName      uint16
+	CchServerName     uint16
+	IbUnused          uint16
+	CbUnused          uint16
+	IbCltIntName      uint16
+	CchCltIntName     uint16
+	IbLanguage        uint16
+	CchLanguage       uint16
+	IbDatabase        uint16 // offset
+	CchDatabase       uint16 // length
+	ClientID          [6]byte
+	IbSSPI            uint16
+	CbSSPI            uint16
+	IbAtchDBFile      uint16
+	CchAtchDBFile     uint16
+	IbChangePassword  uint16
+	CchChangePassword uint16
+	CbSSPILong        uint32
 }
 
 func ReadLogin7Packet(conn net.Conn) (*Login7Packet, error) {
@@ -75,65 +72,24 @@ func ReadLogin7Packet(conn net.Conn) (*Login7Packet, error) {
 	if pkt.Type != PacketTypeLogin7 {
 		return nil, trace.BadParameter("expected LOGIN7 packet, got: %#v", pkt)
 	}
+	var fields Login7PacketFields
+	buf := bytes.NewBuffer(pkt.Data)
+	err = binary.Read(buf, binary.LittleEndian, &fields)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
 	p := &Login7Packet{
-		//Packet:        *pkt,
-		Length:        binary.LittleEndian.Uint32(pkt.Data[0:4]),
-		TDSVersion:    binary.LittleEndian.Uint32(pkt.Data[4:8]),
-		PacketSize:    binary.LittleEndian.Uint32(pkt.Data[8:12]),
-		ClientProgVer: binary.LittleEndian.Uint32(pkt.Data[12:16]),
-		ClientPID:     binary.LittleEndian.Uint32(pkt.Data[16:20]),
-		ConnectionID:  binary.LittleEndian.Uint32(pkt.Data[20:24]),
-
-		OptionFlags1: pkt.Data[24],
-		OptionFlags2: pkt.Data[25],
-		TypeFlags:    pkt.Data[26],
-		OptionFlags3: pkt.Data[27],
-
-		ClientTimezone: binary.LittleEndian.Uint32(pkt.Data[28:32]),
-		ClientLCID:     binary.LittleEndian.Uint32(pkt.Data[32:36]),
-
-		OffsetLength: OffsetLength{
-			ibHostName:        binary.LittleEndian.Uint16(pkt.Data[36:38]),
-			cchHostName:       binary.LittleEndian.Uint16(pkt.Data[38:40]),
-			ibUserName:        binary.LittleEndian.Uint16(pkt.Data[40:42]),
-			cchUserName:       binary.LittleEndian.Uint16(pkt.Data[42:44]),
-			ibPassword:        binary.LittleEndian.Uint16(pkt.Data[44:46]),
-			cchPassword:       binary.LittleEndian.Uint16(pkt.Data[46:48]),
-			ibAppName:         binary.LittleEndian.Uint16(pkt.Data[48:50]),
-			cchAppName:        binary.LittleEndian.Uint16(pkt.Data[50:52]),
-			ibServerName:      binary.LittleEndian.Uint16(pkt.Data[52:54]),
-			cchServerName:     binary.LittleEndian.Uint16(pkt.Data[54:56]),
-			ibUnused:          binary.LittleEndian.Uint16(pkt.Data[56:58]),
-			cbUnused:          binary.LittleEndian.Uint16(pkt.Data[58:60]),
-			ibCltIntName:      binary.LittleEndian.Uint16(pkt.Data[60:62]),
-			cchCltIntName:     binary.LittleEndian.Uint16(pkt.Data[62:64]),
-			ibLanguage:        binary.LittleEndian.Uint16(pkt.Data[64:66]),
-			cchLanguage:       binary.LittleEndian.Uint16(pkt.Data[66:68]),
-			ibDatabase:        binary.LittleEndian.Uint16(pkt.Data[68:70]),
-			cchDatabase:       binary.LittleEndian.Uint16(pkt.Data[70:72]),
-			ClientID:          pkt.Data[72:78],
-			ibSSPI:            binary.LittleEndian.Uint16(pkt.Data[78:80]),
-			cbSSPI:            binary.LittleEndian.Uint16(pkt.Data[80:82]),
-			ibAtchDBFile:      binary.LittleEndian.Uint16(pkt.Data[82:84]),
-			cchAtchDBFile:     binary.LittleEndian.Uint16(pkt.Data[84:86]),
-			ibChangePassword:  binary.LittleEndian.Uint16(pkt.Data[86:88]),
-			cchChangePassword: binary.LittleEndian.Uint16(pkt.Data[88:90]),
-			cbSSPILong:        binary.LittleEndian.Uint32(pkt.Data[90:94]),
-		},
-
-		Data: pkt.Data[94:],
+		Fields: fields,
+		Data:   buf.Bytes(), // Remaining unread portion of buffer is the login7 data.
 	}
-
-	p.Database, err = ucs22str(pkt.Data[p.OffsetLength.ibDatabase : p.OffsetLength.ibDatabase+p.OffsetLength.cchDatabase*2])
+	p.Database, err = ucs22str(pkt.Data[p.Fields.IbDatabase : p.Fields.IbDatabase+p.Fields.CchDatabase*2])
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-
-	p.User, err = ucs22str(pkt.Data[p.OffsetLength.ibUserName : p.OffsetLength.ibUserName+p.OffsetLength.cchUserName*2])
+	p.User, err = ucs22str(pkt.Data[p.Fields.IbUserName : p.Fields.IbUserName+p.Fields.CchUserName*2])
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-
 	return p, nil
 }
 
