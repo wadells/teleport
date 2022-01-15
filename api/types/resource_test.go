@@ -123,6 +123,8 @@ func TestMatchSearch(t *testing.T) {
 func TestMatchSearch_ResourceSpecific(t *testing.T) {
 	t.Parallel()
 
+	labels := map[string]string{"env": "prod", "os": "mac"}
+
 	cases := []struct {
 		name string
 		// searchNotDefined refers to resources where the searcheable field values are not defined.
@@ -132,12 +134,12 @@ func TestMatchSearch_ResourceSpecific(t *testing.T) {
 	}{
 		{
 			name:               "node",
-			matchingSearchVals: []string{"foo", "bar"},
+			matchingSearchVals: []string{"foo", "bar", "prod", "os"},
 			newResource: func() ResourceWithLabels {
-				server, err := NewServer("_", KindNode, ServerSpecV2{
+				server, err := NewServerWithLabels("_", KindNode, ServerSpecV2{
 					Hostname: "foo",
 					Addr:     "bar",
-				})
+				}, labels)
 				require.NoError(t, err)
 
 				return server
@@ -157,9 +159,9 @@ func TestMatchSearch_ResourceSpecific(t *testing.T) {
 		},
 		{
 			name:               "windows desktop",
-			matchingSearchVals: []string{"foo", "bar"},
+			matchingSearchVals: []string{"foo", "bar", "env", "prod", "os"},
 			newResource: func() ResourceWithLabels {
-				desktop, err := NewWindowsDesktopV3("foo", nil, WindowsDesktopSpecV3{
+				desktop, err := NewWindowsDesktopV3("foo", labels, WindowsDesktopSpecV3{
 					Addr: "bar",
 				})
 				require.NoError(t, err)
@@ -169,11 +171,12 @@ func TestMatchSearch_ResourceSpecific(t *testing.T) {
 		},
 		{
 			name:               "application",
-			matchingSearchVals: []string{"foo", "bar", "baz"},
+			matchingSearchVals: []string{"foo", "bar", "baz", "mac"},
 			newResource: func() ResourceWithLabels {
 				app, err := NewAppV3(Metadata{
 					Name:        "foo",
 					Description: "bar",
+					Labels:      labels,
 				}, AppSpecV3{
 					PublicAddr: "baz",
 					URI:        "_",
@@ -185,10 +188,11 @@ func TestMatchSearch_ResourceSpecific(t *testing.T) {
 		},
 		{
 			name:               "kube cluster",
-			matchingSearchVals: []string{"foo"},
+			matchingSearchVals: []string{"foo", "prod", "env"},
 			newResource: func() ResourceWithLabels {
 				kc, err := NewKubernetesClusterV3FromLegacyCluster("_", &KubernetesCluster{
-					Name: "foo",
+					Name:         "foo",
+					StaticLabels: labels,
 				})
 				require.NoError(t, err)
 
@@ -197,11 +201,12 @@ func TestMatchSearch_ResourceSpecific(t *testing.T) {
 		},
 		{
 			name:               "database",
-			matchingSearchVals: []string{"foo", "bar", "baz", DatabaseTypeRedshift},
+			matchingSearchVals: []string{"foo", "bar", "baz", "prod", DatabaseTypeRedshift},
 			newResource: func() ResourceWithLabels {
 				db, err := NewDatabaseV3(Metadata{
 					Name:        "foo",
 					Description: "bar",
+					Labels:      labels,
 				}, DatabaseSpecV3{
 					Protocol: "baz",
 					URI:      "_",

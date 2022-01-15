@@ -331,7 +331,7 @@ func (d *DatabaseV3) Copy() *DatabaseV3 {
 // MatchSearch goes through select field values and tries to
 // match against the list of search values.
 func (d *DatabaseV3) MatchSearch(values []string) bool {
-	fieldVals := []string{d.GetName(), d.GetDescription(), d.GetProtocol(), d.GetType()}
+	fieldVals := []string{d.GetName(), d.GetDescription(), d.GetProtocol(), d.GetType(), fmt.Sprint(d.GetAllLabels())}
 	return MatchSearch(fieldVals, values, nil)
 }
 

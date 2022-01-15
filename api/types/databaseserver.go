@@ -28,8 +28,8 @@ import (
 
 // DatabaseServer represents a database access server.
 type DatabaseServer interface {
-	// Resource provides common resource methods.
-	Resource
+	// ResourceWithLabels provides common resource methods.
+	ResourceWithLabels
 	// GetNamespace returns server namespace.
 	GetNamespace() string
 	// GetTeleportVersion returns the teleport version the server is running on.
@@ -267,3 +267,18 @@ func (s DatabaseServers) Less(i, j int) bool {
 
 // Swap swaps two database servers.
 func (s DatabaseServers) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+
+// Origin returns the origin value of the resource.
+func (s *DatabaseServerV3) Origin() string {
+	return s.Metadata.Origin()
+}
+
+// SetOrigin sets the origin value of the resource.
+func (s *DatabaseServerV3) SetOrigin(origin string) {
+	s.Metadata.SetOrigin(origin)
+}
+
+// GetAllLabels returns all resource's labels.
+func (s *DatabaseServerV3) GetAllLabels() map[string]string {
+	return s.Metadata.Labels
+}

@@ -28,8 +28,8 @@ import (
 
 // AppServer represents a single proxied web app.
 type AppServer interface {
-	// Resource provides common resource methods.
-	Resource
+	// ResourceWithLabels provides common resource methods.
+	ResourceWithLabels
 	// GetNamespace returns server namespace.
 	GetNamespace() string
 	// GetTeleportVersion returns the teleport version the server is running on.
@@ -277,3 +277,18 @@ func (s AppServers) Less(i, j int) bool {
 
 // Swap swaps two app servers.
 func (s AppServers) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+
+// Origin returns the origin value of the resource.
+func (s *AppServerV3) Origin() string {
+	return s.Metadata.Origin()
+}
+
+// SetOrigin sets the origin value of the resource.
+func (s *AppServerV3) SetOrigin(origin string) {
+	s.Metadata.SetOrigin(origin)
+}
+
+// GetAllLabels returns all resource's labels.
+func (s *AppServerV3) GetAllLabels() map[string]string {
+	return s.Metadata.Labels
+}

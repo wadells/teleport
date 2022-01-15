@@ -31,8 +31,8 @@ import (
 
 // Server represents a Node, Proxy or Auth server in a Teleport cluster
 type Server interface {
-	// Resource provides common resource headers
-	Resource
+	// ResourceWithLabels provides common resource headers
+	ResourceWithLabels
 	// GetTeleportVersion returns the teleport version the server is running on
 	GetTeleportVersion() string
 	// GetAddr return server address
@@ -360,7 +360,7 @@ func (s *ServerV2) MatchSearch(values []string) bool {
 	var custom func(val string) bool
 
 	if s.GetKind() == KindNode {
-		fieldVals = []string{s.GetHostname(), s.GetAddr()}
+		fieldVals = []string{s.GetHostname(), s.GetAddr(), fmt.Sprint(s.GetAllLabels())}
 		custom = func(val string) bool {
 			return strings.EqualFold(val, "tunnel") && s.GetUseTunnel()
 		}
@@ -465,3 +465,13 @@ func LabelsToV2(labels map[string]CommandLabel) map[string]CommandLabelV2 {
 // client side, in the ~/.tsh directory. Restricting characters helps with
 // sneaky cluster names being used for client directory traversal and exploits.
 var validKubeClusterName = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
+// Origin returns the origin value of the resource.
+func (s *ServerV2) Origin() string {
+	return s.Metadata.Origin()
+}
+
+// SetOrigin sets the origin value of the resource.
+func (s *ServerV2) SetOrigin(origin string) {
+	s.Metadata.SetOrigin(origin)
+}

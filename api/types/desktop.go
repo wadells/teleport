@@ -17,6 +17,8 @@ limitations under the License.
 package types
 
 import (
+	"fmt"
+
 	"github.com/gravitational/trace"
 )
 
@@ -162,6 +164,6 @@ func (d *WindowsDesktopV3) SetOrigin(o string) {
 // MatchSearch goes through select field values and tries to
 // match against the list of search values.
 func (d *WindowsDesktopV3) MatchSearch(values []string) bool {
-	fieldVals := []string{d.GetName(), d.GetAddr()}
+	fieldVals := []string{d.GetName(), d.GetAddr(), fmt.Sprint(d.GetAllLabels())}
 	return MatchSearch(fieldVals, values, nil)
 }
