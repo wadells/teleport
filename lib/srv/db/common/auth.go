@@ -32,6 +32,8 @@ import (
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/tlsca"
 	"github.com/gravitational/teleport/lib/utils"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 
@@ -39,6 +41,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/rds/rdsutils"
 	"github.com/aws/aws-sdk-go/service/redshift"
 
+	"github.com/GoogleCloudPlatform/cloudsql-proxy/proxy/certs"
 	sqladmin "google.golang.org/api/sqladmin/v1beta4"
 	gcpcredentialspb "google.golang.org/genproto/googleapis/iam/credentials/v1"
 
@@ -359,6 +362,14 @@ func (a *dbAuth) getTLSConfigVerifyFull(ctx context.Context, sessionCtx *Session
 		tlsConfig.InsecureSkipVerify = true
 		// This will verify CN and cert chain on each connection.
 		tlsConfig.VerifyConnection = getVerifyCloudSQLCertificate(tlsConfig.RootCAs)
+
+		// Generate client certificate for mTLS
+		cert, err := a.genClientCertificate(ctx)
+		if err != nil {
+			logrus.Errorf("genClientCertificate: %v", err)
+		} else {
+			tlsConfig.Certificates = append(tlsConfig.Certificates, cert)
+		}
 	}
 
 	dbTLSConfig := sessionCtx.Database.GetTLS()
@@ -377,6 +388,31 @@ func (a *dbAuth) getTLSConfigVerifyFull(ctx context.Context, sessionCtx *Session
 	// certificate. The database instance should be configured with
 	// Teleport's CA obtained with 'tctl auth sign --type=db'.
 	return a.appendClientCert(ctx, sessionCtx, tlsConfig)
+}
+
+func (a *dbAuth) genClientCertificate(ctx context.Context) (cert tls.Certificate, err error) {
+	token, _ := ctx.Value("Token").(string)
+	tokenSource := oauthToken(token)
+	cl, err := google.DefaultClient(ctx, "https://www.googleapis.com/auth/sqlservice.admin")
+	if err != nil {
+		return cert, trace.Errorf("DefaultClient: %v", err)
+	}
+	certSource := certs.NewCertSource("", cl, false)
+	certSource.EnableIAMLogin = true
+	certSource.TokenSource = oauth2.TokenSource(tokenSource)
+	cert, err = certSource.Local("kubeadm-167321:us-central1:test")
+	if err != nil {
+		return cert, trace.Errorf("Local: %v", err)
+	}
+	return cert, nil
+}
+
+type oauthToken string
+
+func (t oauthToken) Token() (*oauth2.Token, error) {
+	return &oauth2.Token{
+		AccessToken: string(t),
+	}, nil
 }
 
 // getTLSConfigInsecure generates tls.Config when TLS mode is equal to 'insecure'.

@@ -445,12 +445,14 @@ func (e *Engine) getConnectConfig(ctx context.Context, sessionCtx *common.Sessio
 		// alice@postgres-server-name.
 		config.User = fmt.Sprintf("%v@%v", config.User, sessionCtx.Database.GetAzure().Name)
 	}
+	ctx = context.WithValue(ctx, "Token", config.Password)
 	// TLS config will use client certificate for an onprem database or
 	// will contain RDS root certificate for RDS/Aurora.
 	config.TLSConfig, err = e.Auth.GetTLSConfig(ctx, sessionCtx)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+	logrus.Debugf("***** %+v", config)
 	return config, nil
 }
 
