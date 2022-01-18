@@ -1012,6 +1012,22 @@ func (a *Server) generateUserCert(req certRequest) (*proto.Certs, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+
+	if a.emitter.EmitAuditEvent(a.closeCtx, &apievents.UserCertsEmit{
+		Metadata: apievents.Metadata{
+			Type: events.UserCertsEmitEvent,
+			Code: events.UserCertsEmitCode,
+		},
+		UserMetadata: apievents.UserMetadata{
+			User:         identity.Username,
+			Impersonator: identity.Impersonator,
+		},
+		Subject: subject.String(),
+		Expires: certRequest.NotAfter,
+	}); err != nil {
+		log.WithError(err).Warn("Failed to emit user certs emit event.")
+	}
+
 	return &proto.Certs{
 		SSH:        sshCert,
 		TLS:        tlsCert,

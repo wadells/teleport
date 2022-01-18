@@ -474,4 +474,7 @@ const (
 	LockCreatedCode = "TLK00I"
 	// LockDeletedCode is the lock deleted event code.
 	LockDeletedCode = "TLK01I"
+
+	// UserCertsEmitCode is the user certificate set emitted code.
+	UserCertsEmitCode = "TC000I"
 )
