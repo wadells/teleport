@@ -19,6 +19,7 @@ package sqlserver
 import (
 	"context"
 	"crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -67,7 +68,7 @@ type connectInfo struct {
 	db   string
 }
 
-func (e *Engine) handleLogin7() (*connectInfo, error) {
+func (e *Engine) handleLogin7() (*protocol.Login7Packet, error) {
 	pkt, err := protocol.ReadLogin7Packet(e.clientConn)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -81,17 +82,14 @@ func (e *Engine) handleLogin7() (*connectInfo, error) {
 	}
 
 	e.Log.Debugf("LOGIN7 DONE ====")
-	return &connectInfo{
-		user: pkt.User,
-		db:   pkt.Database,
-	}, nil
+	return pkt, nil
 }
 
 //
 func (e *Engine) HandleConnection(ctx context.Context, sessionCtx *common.Session) error {
 	fmt.Println("=== [AGENT] Received SQL Server connection ===")
 
-	connInfo, err := e.handleLogin7()
+	login7, err := e.handleLogin7()
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -108,16 +106,25 @@ func (e *Engine) HandleConnection(ctx context.Context, sessionCtx *common.Sessio
 		return trace.Wrap(err)
 	}
 
+	db := login7.Database
+	if db == "" {
+		db = "master"
+	}
+
 	connector := mssql.NewConnectorConfig(msdsn.Config{
 		Host: host,
 		Port: portI,
 		//User:     os.Getenv("SQL_SERVER_USER"),
-		User:     connInfo.user,
+		User:     login7.User,
 		Password: os.Getenv("SQL_SERVER_PASS"),
-		Database: connInfo.db,
+		Database: db,
 		//Encryption: msdsn.EncryptionOff,
 		Encryption: msdsn.EncryptionRequired,
 		TLSConfig:  &tls.Config{InsecureSkipVerify: true},
+		// OptionFlags1: login7.Fields.OptionFlags1,
+		// OptionFlags2: login7.Fields.OptionFlags2,
+		// TypeFlags:    login7.Fields.TypeFlags,
+		// OptionFlags3: login7.Fields.OptionFlags3,
 	}, nil)
 
 	conn, err := connector.Connect(ctx)
@@ -162,10 +169,43 @@ func (e *Engine) receiveFromClient(clientConn, serverConn io.ReadWriteCloser, cl
 		log.Debug("Stop receiving from client.")
 		close(clientErrCh)
 	}()
-	_, err := io.Copy(serverConn, clientConn)
-	if err != nil { // && !utils.IsOKNetworkError(err) {
-		log.WithError(err).Error("Failed to copy from client to server.")
-		clientErrCh <- err
+	for {
+		pkt, err := protocol.ReadPacket(clientConn)
+		if err != nil {
+			log.WithError(err).Error("Failed to read from client.")
+			clientErrCh <- err
+			return
+		}
+
+		buf := append(pkt.PacketHeader.Raw, pkt.Data...)
+
+		if pkt.Type == protocol.PacketTypeSQLBatch {
+			sqlBatch, err := protocol.ParseSQLBatchPacket(pkt)
+			if err != nil {
+				log.WithError(err).Error("Failed to parse SQLBatch packet.")
+			} else {
+				log.Debugf("===> Got query: %v", sqlBatch.Query)
+			}
+		}
+
+		// buf := make([]byte, 4096)
+
+		// n, err := clientConn.Read(buf)
+		// if err != nil {
+		// 	log.WithError(err).Error("Failed to read from client.")
+		// 	clientErrCh <- err
+		// 	return
+		// }
+
+		fmt.Printf("================> (len: %v)\n", len(buf))
+		fmt.Println(hex.Dump(buf))
+
+		_, err = serverConn.Write(buf)
+		if err != nil {
+			log.WithError(err).Error("Failed to write to server.")
+			clientErrCh <- err
+			return
+		}
 	}
 }
 
@@ -177,9 +217,24 @@ func (e *Engine) receiveFromServer(serverConn, clientConn io.ReadWriteCloser, se
 		log.Debug("Stop receiving from server.")
 		close(serverErrCh)
 	}()
-	_, err := io.Copy(clientConn, serverConn)
-	if err != nil { // && !utils.IsOKNetworkError(err) {
-		log.WithError(err).Error("Failed to copy from server to client.")
-		serverErrCh <- err
+	for {
+		buf := make([]byte, 4096)
+
+		n, err := serverConn.Read(buf)
+		if err != nil {
+			log.WithError(err).Error("Failed to read from server.")
+			serverErrCh <- err
+			return
+		}
+
+		fmt.Printf("<================ (len: %v)\n", n)
+		fmt.Println(hex.Dump(buf[:n]))
+
+		_, err = clientConn.Write(buf[:n])
+		if err != nil {
+			log.WithError(err).Error("Failed to write to client.")
+			serverErrCh <- err
+			return
+		}
 	}
 }

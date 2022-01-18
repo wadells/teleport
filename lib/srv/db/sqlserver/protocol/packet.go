@@ -90,6 +90,7 @@ const (
 	PacketTypeResponse uint8 = 4  // 0x04
 	PacketTypeLogin7   uint8 = 16 // 0x10
 	PacketTypePreLogin uint8 = 18 // 0x12
+	PacketTypeSQLBatch uint8 = 0x01
 
 	packetHeaderSize = 8
 )
