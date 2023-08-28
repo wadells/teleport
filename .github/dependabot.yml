@@ -6,10 +6,15 @@ updates:
       interval: daily
       time: '14:55'
       timezone: "America/Los_Angeles"
-    # schedule:
-    #   interval: weekly
-    #   day: "sunday"
-    #   time: "09:00" # 9am UTC
+    reviewers:
+      - wadells
+  - package-ecosystem: github-actions
+    target-branch: "branch/v13"
+    directory: "/"
+    schedule:
+      interval: daily
+      time: '15:55'
+      timezone: "America/Los_Angeles"
     reviewers:
       - wadells
 #   - package-ecosystem: gomod
